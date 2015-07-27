@@ -37,6 +37,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="lib_class.cs" />
+    <Compile Include="QuickLZ.cs" />
     <Compile Include="ResourceGetter.cs" />
     <Compile Include="RunPE.cs" />
   </ItemGroup>

@@ -46,9 +46,12 @@ namespace A
                 R.NextBytes(k);
             }
 
-            Sleep(1000 * 5);
+            // Sleep(1000 * 5);
 
             xor(p, k);
+
+            p = QuickLZ.decompress(p);
+
 
             return p;
         }

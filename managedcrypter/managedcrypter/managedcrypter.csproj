@@ -39,13 +39,18 @@
     <Compile Include="IO\GenericDirectory.cs" />
     <Compile Include="IO\SourceTraverser.cs" />
     <Compile Include="Program.cs" />
+    <Compile Include="QuickLZ.cs" />
     <Compile Include="StringConstants.cs" />
     <Compile Include="USG\MethodGen.cs" />
+    <Compile Include="USG\ResourceGen.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Drawing" />
+    <Reference Include="Vestris.ResourceLib">
+      <HintPath>..\..\..\..\Documents\resourcelib-master\resourcelib-master\Source\ResourceLib\bin\Release\Vestris.ResourceLib.dll</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

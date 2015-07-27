@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -14,15 +13,19 @@ namespace managedcrypter.IO
             setEncryptionKey();
         }
 
-        public GenericFile(string filePath)
+        public GenericFile(string filePath, bool bCompress)
         {
-            this.OriginalFileData = File.ReadAllBytes(filePath);
+            OriginalFileData = File.ReadAllBytes(filePath);
+
+            if (bCompress)
+                OriginalFileData = QuickLZ.compress(OriginalFileData, 3);
+
             setEncryptionKey();
         }
 
         public GenericFile(byte[] fileData)
         {
-            this.OriginalFileData = fileData;
+            OriginalFileData = fileData;
 
             setEncryptionKey();
         }
@@ -31,7 +34,6 @@ namespace managedcrypter.IO
         public byte[] EncryptedData { get; private set; }
         public byte[] EncodedData { get; private set; }
         public byte[] EncryptionKey { get; private set; }
-        public byte[] StenographedData { get; private set; }
 
         public void EncryptData()
         {
@@ -42,20 +44,6 @@ namespace managedcrypter.IO
         {
             EncodedData = new ASCIIEncoding().GetBytes(Convert.ToBase64String(EncryptedData));
         }
-
-        public void ConvertToImage()
-        {
-            using (MemoryStream ms = new MemoryStream(EncodedData))
-            {
-                Image img = Image.FromStream(ms);
-                using (MemoryStream ms2 = new MemoryStream())
-                {
-                    img.Save(ms2, System.Drawing.Imaging.ImageFormat.Icon);
-                    StenographedData = ms2.ToArray();
-                }
-            }
-        }
-
 
 #if DEBUG
         public bool SanityCheck()

