@@ -14,7 +14,6 @@ namespace managedcrypter.USG
         {
             AvailableTypes = new Dictionary<Type, string>();
             setAvailableTypes();
-            Console.WriteLine(constructMethodHead());
         }
 
         public string RandMethod()
@@ -27,7 +26,7 @@ namespace managedcrypter.USG
             string begin = "{";
             string end = "}";
 
-            int mtd_lines = Rand.Next(15, 50);
+            int mtd_lines = Rand.Next(1,2);
             StringBuilder sb = new StringBuilder();
             sb.AppendLine(begin);
 
@@ -44,8 +43,7 @@ namespace managedcrypter.USG
 
         string buildMethodLine()
         {
-            int mtdCase = new Random(Guid.NewGuid().GetHashCode()).Next(1, 2);
-            Console.WriteLine(mtdCase);
+            int mtdCase = new Random(Guid.NewGuid().GetHashCode()).Next(1, 2); //exclusive i know :)
             string ret = string.Empty;
 
             switch (mtdCase)
@@ -98,7 +96,8 @@ namespace managedcrypter.USG
                                 {
                                     Type pt = param.ParameterType;
                                     ConstructorInfo ctor2 = pt.GetConstructors().FirstOrDefault();
-
+                                    if (pt.FullName.Contains("+"))
+                                        goto __startover;
                                     if (null == ctor2 || ctor2.GetParameters().Length > 0)
                                     {
                                         goto __startover;
@@ -179,6 +178,8 @@ namespace managedcrypter.USG
                                 {
                                     Type pt = param.ParameterType;
                                     ConstructorInfo ctor2 = pt.GetConstructors().FirstOrDefault();
+                                    if (pt.FullName.Contains("+"))
+                                        goto __startover;
 
                                     if (null == ctor2 || ctor2.GetParameters().Length > 0)
                                     {
@@ -223,14 +224,28 @@ namespace managedcrypter.USG
             MethodInfo mi = null;
             string root = @"C:\Windows\Microsoft.NET\Framework\v2.0.50727";
 
+
             List<Assembly> asms = new List<Assembly>();
             asms.Add(Assembly.LoadFrom(Path.Combine(root, "mscorlib.dll")));
             asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.dll")));
-            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Data.dll")));
             asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Windows.Forms.dll")));
-            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Web.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Configuration.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Xml.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Drawing.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Deployment.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Security.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "Accessibility.dll")));
+            List<Assembly> asms2 = new List<Assembly>();
 
-            foreach (var asm in asms)
+            foreach (var a in asms)
+            {
+                foreach (var asmRef in a.GetReferencedAssemblies())
+                    asms2.Add(Assembly.LoadFrom(Path.Combine(root, string.Concat(asmRef.Name, ".dll"))));
+            }
+
+            asms2 = asms.Distinct().ToList();
+
+            foreach (var asm in asms2)
             {
                 foreach (var type in asm.GetExportedTypes())
                 {
@@ -238,7 +253,7 @@ namespace managedcrypter.USG
                     {
                         foreach (var mtd in type.GetMethods())
                         {
-                            if (mtd.IsStatic && mtd.IsPublic && !mtd.IsSpecialName && mtd.ReturnType.FullName == T.FullName)
+                            if (mtd.IsStatic && mtd.IsPublic && !mtd.IsSpecialName && mtd.ReturnType.FullName == T.FullName && !T.FullName.Contains("+") && !mtd.Name.Contains("+"))
                                 return mtd;
                         }
                     }
@@ -305,15 +320,29 @@ namespace managedcrypter.USG
             List<Assembly> asms = new List<Assembly>();
             asms.Add(Assembly.LoadFrom(Path.Combine(root, "mscorlib.dll")));
             asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.dll")));
-            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Data.dll")));
             asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Windows.Forms.dll")));
-            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Web.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Configuration.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Xml.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Drawing.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Deployment.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Security.dll")));
+            asms.Add(Assembly.LoadFrom(Path.Combine(root, "Accessibility.dll")));
 
-            foreach (var asm in asms)
+            List<Assembly> asms2 = new List<Assembly>();
+
+            foreach (var a in asms)
+            {
+                foreach (var asmRef in a.GetReferencedAssemblies())
+                    asms2.Add(Assembly.LoadFrom(Path.Combine(root, string.Concat(asmRef.Name, ".dll"))));
+            }
+
+            asms2 = asms.Distinct().ToList();
+
+            foreach (var asm in asms2)
             {
                 foreach (var type in asm.GetExportedTypes())
                 {
-                    if (type.IsVisible && type.IsPublic && type.IsClass && !type.IsGenericType && !type.IsAbstract && !type.IsInterface && type.GetConstructors().Length > 0)
+                    if (type.IsVisible && type.IsPublic && type.IsClass && !type.IsGenericType && !type.IsAbstract && !type.IsInterface && !type.FullName.Contains("+") && !type.IsSpecialName && type.GetConstructors().Length > 0)
                     {
                         AvailableTypes.Add(type, type.FullName);
                     }

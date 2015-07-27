@@ -4,12 +4,12 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{434894BF-7641-4B4A-96D7-8BA22CDEB943}</ProjectGuid>
+    <ProjectGuid>{70E28231-9E62-438E-80D5-BA7AA347DBFB}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>managedcrypter</RootNamespace>
-    <AssemblyName>managedcrypter</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <RootNamespace>qapc_injection</RootNamespace>
+    <AssemblyName>qapc-injection</AssemblyName>
+    <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -21,6 +21,7 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -32,22 +33,15 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Compiler\CompilerInfo.cs" />
-    <Compile Include="Compiler\GenericCompiler.cs" />
-    <Compile Include="IO\GenericFile.cs" />
-    <Compile Include="IO\FileTraverser.cs" />
-    <Compile Include="IO\GenericDirectory.cs" />
-    <Compile Include="IO\SourceTraverser.cs" />
-    <Compile Include="Program.cs" />
-    <Compile Include="StringConstants.cs" />
-    <Compile Include="USG\MethodGen.cs" />
-    <Compile Include="Utils.cs" />
+    <Reference Include="System" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Reference Include="System" />
-    <Reference Include="System.Drawing" />
+    <Compile Include="pe_injector.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="structs.cs" />
   </ItemGroup>
-  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -30,6 +31,7 @@ namespace managedcrypter.IO
         public byte[] EncryptedData { get; private set; }
         public byte[] EncodedData { get; private set; }
         public byte[] EncryptionKey { get; private set; }
+        public byte[] StenographedData { get; private set; }
 
         public void EncryptData()
         {
@@ -40,6 +42,20 @@ namespace managedcrypter.IO
         {
             EncodedData = new ASCIIEncoding().GetBytes(Convert.ToBase64String(EncryptedData));
         }
+
+        public void ConvertToImage()
+        {
+            using (MemoryStream ms = new MemoryStream(EncodedData))
+            {
+                Image img = Image.FromStream(ms);
+                using (MemoryStream ms2 = new MemoryStream())
+                {
+                    img.Save(ms2, System.Drawing.Imaging.ImageFormat.Icon);
+                    StenographedData = ms2.ToArray();
+                }
+            }
+        }
+
 
 #if DEBUG
         public bool SanityCheck()
@@ -59,6 +75,7 @@ namespace managedcrypter.IO
                 in many cases...BTW the algo isn't meant to be secure
                 at all, it doesn't need to be - we are evading AV 
                 analysis not reverse engineers :) */
+
         void setEncryptionKey()
         {
             Random R = new Random(Guid.NewGuid().GetHashCode());

@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 
 namespace managedcrypter
@@ -13,19 +15,6 @@ namespace managedcrypter
     {
         static void Main(string[] args)
         {
-            //MethodGen mtdGen = new MethodGen();
-
-            //StringBuilder sb = new StringBuilder();
-
-            //for (int i = 0; i < 10; i++)
-            //{
-            //    sb.AppendLine(mtdGen.RandMethod());
-            //}
-
-            //File.WriteAllText("C:\\Users\\Admin\\Desktop\\Method.txt", sb.ToString());
-
-            //Debugger.Break();
-
             GenericFile cFile = null; /* file to crypt */
             GenericFile lFile = null; /* lib */
             GenericDirectory sDirectory = null; /* stub directory */
@@ -127,7 +116,7 @@ namespace managedcrypter
 
             /* encrypt our library */
             lFile.EncryptData();
-            lFile.EncodeData();
+            lFile.EncodeData();     
 
             Console.WriteLine("Sanity Check Lib: {0}", lFile.SanityCheck());
 
@@ -147,8 +136,22 @@ namespace managedcrypter
                     sWorkspace.AnonymousChildren["lib"]);
             }
 
+            /* primitive usg */
+            {
+                StringBuilder sb = new StringBuilder();
+                MethodGen mtdGen = new MethodGen();
+
+                for (int i = 0; i < 50; i++)
+                    sb.AppendLine(mtdGen.RandMethod());
+
+                Utils.ReplaceStringInFile(
+                    sDirectory.Source.Files["stub_class"],
+                    StringConstants.STR_JUNK,
+                    sb.ToString());
+            }
+
             Console.ReadLine();
-         
+
             /* compile our stub */
             using (GenericCompiler sCompiler = new GenericCompiler())
             {
@@ -160,11 +163,35 @@ namespace managedcrypter
                     "TestFile.exe");
 
                 /* usg */
-                cInfo.ReferencedAssemblies.Add("System.Data.dll");
-                cInfo.ReferencedAssemblies.Add("System.Windows.Forms.dll");
-                cInfo.ReferencedAssemblies.Add("System.Web.dll");
-                cInfo.ReferencedAssemblies.Add("System.Configuration.dll");
-                cInfo.ReferencedAssemblies.Add("System.Xml.dll");
+                {
+                    string root = @"C:\Windows\Microsoft.NET\Framework\v2.0.50727";
+
+                    List<Assembly> asms = new List<Assembly>();
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "mscorlib.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Windows.Forms.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Configuration.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Xml.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Drawing.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Deployment.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "System.Security.dll")));
+                    asms.Add(Assembly.LoadFrom(Path.Combine(root, "Accessibility.dll")));
+
+                    List<Assembly> asms2 = new List<Assembly>();
+
+                    foreach (var a in asms)
+                    {
+                        foreach (var asmRef in a.GetReferencedAssemblies())
+                            asms2.Add(Assembly.LoadFrom(Path.Combine(root, string.Concat(asmRef.Name, ".dll"))));
+                    }
+
+                    asms2 = asms.Distinct().ToList();
+
+                    foreach (var a in asms2)
+                        cInfo.ReferencedAssemblies.Add(string.Concat(a.GetName().Name, ".dll"));
+                }
+
+                cInfo.ExCompilerOptions.Add("/nowarn:618");
 
                 if (sCompiler.CompileSource(sDirectory, cInfo))
                     Console.WriteLine("Successfully compiled stub!");

