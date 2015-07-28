@@ -42,10 +42,14 @@
     <Compile Include="QuickLZ.cs" />
     <Compile Include="StringConstants.cs" />
     <Compile Include="USG\MethodGen.cs" />
+    <Compile Include="USG\MemberRenamer.cs" />
     <Compile Include="USG\ResourceGen.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="Mono.Cecil">
+      <HintPath>..\..\..\..\Documents\cecil-0.9.6\cecil-0.9.6\bin\net_2_0_Release\Mono.Cecil.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Drawing" />
     <Reference Include="Vestris.ResourceLib">

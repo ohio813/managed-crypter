@@ -36,6 +36,7 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Installer.cs" />
     <Compile Include="lib_class.cs" />
     <Compile Include="QuickLZ.cs" />
     <Compile Include="ResourceGetter.cs" />

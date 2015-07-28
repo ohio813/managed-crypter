@@ -26,7 +26,7 @@ namespace managedcrypter.USG
             string begin = "{";
             string end = "}";
 
-            int mtd_lines = Rand.Next(1,2);
+            int mtd_lines = Rand.Next(1,20);
             StringBuilder sb = new StringBuilder();
             sb.AppendLine(begin);
 
@@ -43,7 +43,7 @@ namespace managedcrypter.USG
 
         string buildMethodLine()
         {
-            int mtdCase = new Random(Guid.NewGuid().GetHashCode()).Next(1, 2); //exclusive i know :)
+            int mtdCase = new Random(Guid.NewGuid().GetHashCode()).Next(1, 3); //exclusive i know :)
             string ret = string.Empty;
 
             switch (mtdCase)
