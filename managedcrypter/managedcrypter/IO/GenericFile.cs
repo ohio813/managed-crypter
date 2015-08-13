@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace managedcrypter.IO
@@ -34,6 +36,7 @@ namespace managedcrypter.IO
         public byte[] EncryptedData { get; private set; }
         public byte[] EncodedData { get; private set; }
         public byte[] EncryptionKey { get; private set; }
+        public byte[] StenographedData { get; private set; }
 
         public void EncryptData()
         {
@@ -43,6 +46,12 @@ namespace managedcrypter.IO
         public void EncodeData()
         {
             EncodedData = new ASCIIEncoding().GetBytes(Convert.ToBase64String(EncryptedData));
+        }
+
+        public void StenographData()
+        {
+            ImageConverter iConverter = new ImageConverter();
+            StenographedData = iConverter.ConvertTo(BitmapDataStorage.CreateBitmapFromData(EncodedData), typeof(byte[])) as byte[];
         }
 
 #if DEBUG
